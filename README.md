@@ -1,2 +1,2 @@
 # my-very-own-lisp
-Why not?
+Because why not?
