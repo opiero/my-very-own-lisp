@@ -45,7 +45,7 @@ int main (int argc, char** argv) {
             lispy: /^/ <operator> <expr>+ /$/; \
             ",
             Number, Operator, Expr, Lispy
-    );
+            );
 
     // Print Version and Exit Information
     puts("Lispy Version 0.0.0.0.1");
