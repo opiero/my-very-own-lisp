@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 //if we are compiling on windows compile these functions
 #ifdef _WIN32
-#include <string.h>
 
 static char buffer[2048];
 
@@ -27,6 +27,45 @@ void add_history(char* unused) {}
 #endif
 
 #include "mpc.h"
+
+int number_of_nodes(mpc_ast_t* t) {
+    if (t->children_num == 0) return 1;
+    if (t->children_num >= 1) {
+        int total = 1;
+        for(int i = 0; i < t->children_num; i++){
+            total += number_of_nodes(t->children[i]);
+
+        }
+        return total;
+    }
+    return 0;
+}
+
+long long eval_op (long long x, char* op, long long y) {
+    if (strcmp(op, "+") == 0) return x+y;
+    if (strcmp(op, "-") == 0) return x-y;
+    if (strcmp(op, "*") == 0) return x*y;
+    if (strcmp(op, "/") == 0) return x/y;
+    return 0;
+}
+
+long long eval (mpc_ast_t* t) {
+    if ( strstr(t->tag, "number") ) {
+        return atoi(t->contents);
+    }
+
+    char* op = t->children[1]->contents;
+
+    long long x = eval(t->children[2]);
+
+    int i = 3;
+    while( strstr(t->children[i]->tag, "expr")  ){
+        x = eval_op(x, op, eval(t->children[i]));
+        i++;
+    }
+
+    return x;
+}
 
 int main (int argc, char** argv) {
 
@@ -62,8 +101,9 @@ int main (int argc, char** argv) {
         // attempt to parse the user input
         mpc_result_t r;
         if ( mpc_parse("<stdin>", input, Lispy, &r) ) {
-            // on success print the ast
-            mpc_ast_print(r.output);
+
+            long long result = eval(r.output);
+            printf("%lld\n", result);
             mpc_ast_delete(r.output);
         }
         else {
