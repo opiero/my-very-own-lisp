@@ -27,16 +27,20 @@ void add_history(char* unused) {}
 #include <editline/readline.h>
 #endif
 
+// Create Enumeration of Possible lval Types
 enum { LVAL_NUM, LVAL_ERR };
+
+// Create Enumeration of Possible Error Types
 enum { LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM };
 
-
+// Declare new lval struct
 typedef struct {
     int type;
     long long num;
     int err;
 } lval;
 
+// Create new number type lval
 lval lval_num(long long x) {
     lval v;
     v.type = LVAL_NUM;
@@ -44,6 +48,7 @@ lval lval_num(long long x) {
     return v;
 }
 
+// Create a new error type lval
 lval lval_err(int x) {
     lval v;
     v.type = LVAL_ERR;
@@ -51,15 +56,18 @@ lval lval_err(int x) {
     return v;
 }
 
+// Print an "lval"
 void lval_print (lval v) {
     switch (v.type) {
-
+        // In the case the type is a number, print it
+        // Then 'break' out of the switch
         case LVAL_NUM:
-            printf("%li", v.num);
+            printf("%lli", v.num);
             break;
 
+        // In the case the type is an error
         case LVAL_ERR:
-
+            // Check what type of error it is and print it
             if (v.err == LERR_DIV_ZERO) {
                 printf("Error: Division By Zero!");
             }
@@ -73,6 +81,7 @@ void lval_print (lval v) {
     }
 }
 
+// Print an "lval" followed by a newline
 void lval_println(lval v) {
     lval_print(v);
     putchar('\n');
