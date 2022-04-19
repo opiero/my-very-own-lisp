@@ -27,17 +27,82 @@ void add_history(char* unused) {}
 #endif
 
 // Create Enumeration of Possible lval Types
-enum { LVAL_NUM, LVAL_ERR };
+enum { LVAL_ERR, LVAL_NUM, LVAL_SYM, LVAL_SEXPR };
 
 // Create Enumeration of Possible Error Types
 enum { LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM };
 
 // Declare new lval struct
-typedef struct {
+typedef struct lval {
     int type;
     long long num;
-    int err;
+    // Error and symbol types have some string data
+    char* err;
+    char* sym;
+    // Count and Pointer to a list of "lval"
+    int count;
+    struct lval** cell;
 } lval;
+
+// Construct a pointer to a new number lval
+lval* lval_num(long long x) {
+    lval* v = malloc(sizeof(lval));
+    v->type = LVAL_NUM;
+    v->num = x;
+    return v;
+}
+
+// Construct a pointer to a new error lval
+lval* lval_err(char* m) {
+    lval* v = malloc(sizeof(lval));
+    v->type = LVAL_ERR;
+    v->err = malloc(strlen(m) * sizeof(char) + 1);
+    strcpy(v->err, m);
+    return v;
+}
+
+// Construct a pointer to a new symbol lval
+lval* lval_sym(char* s) {
+    lval* v = malloc(sizeof(lval));
+    v->type = LVAL_SYM;
+    v->sym = malloc(strlen(s) * sizeof(char) + 1);
+    strcpy(v->sym, s);
+    return v;
+}
+
+// Construct a poiter to a new sexpr lval
+lval* lval_sexpr(void) {
+    lval* v = malloc(sizeof(lval));
+    v->type = LVAL_SEXPR;
+    v->count = 0;
+    v->cell = NULL;
+    return v;
+}
+
+void lval_del(lval* v) {
+
+    switch (v->type) {
+        // Do nothing special for number type
+        case LVAL_NUM: break;
+
+        // For Err or Sym free the string data
+        case LVAL_ERR: free(v->err); break;
+        case LVAL_SYM: free(v->sym); break;
+
+        // If Sexpr then delete all elements inside
+        case LVAL_SEXPR:
+            for (int i = 0; i < v->count; i++) {
+                lval_del(v->cell[i]);
+            }
+
+            // also free the memory allocated to contain the pointers
+            free(v->cell);
+            break;
+    }
+
+    // also free the memory allocated from the "lval" struct itself
+    free(v);
+}
 
 int number_of_nodes(mpc_ast_t* t) {
     if (t->children_num == 0) return 1;
@@ -50,22 +115,6 @@ int number_of_nodes(mpc_ast_t* t) {
         return total;
     }
     return 0;
-}
-
-// Create new number type lval
-lval lval_num(long long x) {
-    lval v;
-    v.type = LVAL_NUM;
-    v.num = x;
-    return v;
-}
-
-// Create a new error type lval
-lval lval_err(int x) {
-    lval v;
-    v.type = LVAL_ERR;
-    v.num = x;
-    return v;
 }
 
 // Print an "lval"
@@ -140,7 +189,8 @@ int main (int argc, char** argv) {
 
     // Create some parsers
     mpc_parser_t* Number = mpc_new("number");
-    mpc_parser_t* Operator = mpc_new("operator");
+    mpc_parser_t* Symbol = mpc_new("symbol");
+    mpc_parser_t* Sexpr = mpc_new("sexpr");
     mpc_parser_t* Expr = mpc_new("expr");
     mpc_parser_t* Lispy = mpc_new("lispy");
 
@@ -148,12 +198,12 @@ int main (int argc, char** argv) {
     mpca_lang(MPCA_LANG_DEFAULT,
             " \
             number: /-?[0-9]+/; \
-            operator: '+'|'-'|'*'|'/' ;\
-            expr: <number> | '(' <operator> <expr>+ ')'; \
-            lispy: /^/ <operator> <expr>+ /$/; \
+            symbol: '+' | '-' | '*' | '/'; \
+            sexpr: '(' <expr>* ')'; \
+            expr: <number> | <symbol> | <sexpr> ;\
+            lispy : /^/ <expr>* /$/ ; \
             ",
-            Number, Operator, Expr, Lispy
-            );
+            Number, Symbol, Sexpr, Expr, Lispy);
 
     // Print Version and Exit Information
     puts("Lispy Version 0.0.0.0.1");
@@ -192,6 +242,6 @@ int main (int argc, char** argv) {
     }
 
     //undefine and Delete our Parsers
-    mpc_cleanup(4, Number, Operator, Expr, Lispy);
+    mpc_cleanup(5, Number, Symbol, Sexpr, Expr, Lispy);
     return EXIT_SUCCESS;
 }
