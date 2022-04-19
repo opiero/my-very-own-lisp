@@ -21,7 +21,6 @@ char* readline(char* prompt) {
 // fake add_history function
 void add_history(char* unused) {}
 
-
 // otherwise include the editline headers
 #else
 #include <editline/readline.h>
@@ -39,6 +38,19 @@ typedef struct {
     long long num;
     int err;
 } lval;
+
+int number_of_nodes(mpc_ast_t* t) {
+    if (t->children_num == 0) return 1;
+    if (t->children_num >= 1) {
+        int total = 1;
+        for(int i = 0; i < t->children_num; i++){
+            total += number_of_nodes(t->children[i]);
+
+        }
+        return total;
+    }
+    return 0;
+}
 
 // Create new number type lval
 lval lval_num(long long x) {
@@ -65,16 +77,16 @@ void lval_print (lval v) {
             printf("%lli", v.num);
             break;
 
-        // In the case the type is an error
+            // In the case the type is an error
         case LVAL_ERR:
             // Check what type of error it is and print it
-            if (v.err == LERR_DIV_ZERO) {
+            if (v.num == LERR_DIV_ZERO) {
                 printf("Error: Division By Zero!");
             }
-            if (v.err == LERR_BAD_OP) {
+            if (v.num == LERR_BAD_OP) {
                 printf("Error: Invalid Operator!");
             }
-            if (v.err == LERR_BAD_NUM) {
+            if (v.num == LERR_BAD_NUM) {
                 printf("Error: Invalid Number!");
             }
             break;
@@ -95,23 +107,12 @@ lval eval_op(lval x, char *op, lval y){
     if (strcmp(op, "-") == 0) {return lval_num (x.num - y.num);}
     if (strcmp(op, "*") == 0) {return lval_num (x.num * y.num);}
     if (strcmp(op, "/") == 0) {
+        printf("%lld\n", y.num);
         return y.num == 0 ? lval_err(LERR_DIV_ZERO) : lval_num(x.num / y.num);
     }
     return lval_err(LERR_BAD_OP);
 }
 
-int number_of_nodes(mpc_ast_t* t) {
-    if (t->children_num == 0) return 1;
-    if (t->children_num >= 1) {
-        int total = 1;
-        for(int i = 0; i < t->children_num; i++){
-            total += number_of_nodes(t->children[i]);
-
-        }
-        return total;
-    }
-    return 0;
-}
 
 lval eval (mpc_ast_t* t) {
     if ( strstr(t->tag, "number") ) {
@@ -126,7 +127,7 @@ lval eval (mpc_ast_t* t) {
     lval x = eval(t->children[2]);
 
     int i = 3;
-    while( strstr(t->children[i]->tag, "expr")  ){
+    while(strstr(t->children[i]->tag, "expr")){
         x = eval_op(x, op, eval(t->children[i]));
         i++;
     }
