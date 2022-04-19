@@ -110,6 +110,7 @@ lval eval_op(lval x, char *op, lval y){
         printf("%lld\n", y.num);
         return y.num == 0 ? lval_err(LERR_DIV_ZERO) : lval_num(x.num / y.num);
     }
+    puts("bad op");
     return lval_err(LERR_BAD_OP);
 }
 
@@ -168,6 +169,12 @@ int main (int argc, char** argv) {
 
         // attempt to parse the user input
         mpc_result_t r;
+
+        /*
+         * FIXME: with the following parsing/evaluation, invalid op and
+         * invalid number errors won't be printed to the user
+         * */
+
         if ( mpc_parse("<stdin>", input, Lispy, &r) ) {
 
             lval result = eval(r.output);
