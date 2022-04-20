@@ -9,4 +9,4 @@ leaks:
 	gcc -std=c99 -Wall -g parsing.c mpc.c -ledit -o parsing
 	leaks --atExit -- ./parsing
 clean:
-	rm parsing
+	rm -rf parsing *.dSYM
