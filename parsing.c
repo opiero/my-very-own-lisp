@@ -118,13 +118,17 @@ lval* lval_add(lval* v, lval*x) {
 }
 
 lval* lval_read(mpc_ast_t* t) {
+
+    //if symbol or number, return conversion to that type
     if (strstr(t->tag, "number")) {return lval_read_num(t);}
     if (strstr(t->tag, "symbol")) {return lval_sym(t->contents);}
 
+    //if root (>) or sexpr then create empty list
     lval* x = NULL;
     if (strcmp(t->tag, ">") == 0) {x = lval_sexpr();}
     if (strstr(t->tag, "sexpr")) {x = lval_sexpr();}
 
+    //Fill this list with any valid expression contained within
     for (int i = 0; i < t->children_num; i++) {
         if (strcmp(t->children[i]->contents, "(") == 0) { continue; }
         if (strcmp(t->children[i]->contents, ")") == 0) { continue; }
@@ -151,7 +155,6 @@ int number_of_nodes(mpc_ast_t* t) {
 void lval_print(lval* v);
 void lval_expr_print(lval* v, char open, char close);
 
-    // Print an "lval"
 void lval_print (lval* v) {
     switch(v->type) {
         case LVAL_NUM: printf("%lli", v->num); break;
@@ -165,8 +168,10 @@ void lval_expr_print(lval* v, char open, char close) {
     putchar(open);
     for (int i = 0; i < v->count; i++) {
 
+        //Print Value contained within
         lval_print(v->cell[i]);
 
+        //don't print trailing space for the last element
         if (i != (v->count-1)) {
             putchar(' ');
         }
@@ -179,6 +184,64 @@ void lval_println(lval* x) {
     putchar('\n');
 }
 
+lval* lval_eval_sexpr (lval* v);
+
+lval* lval_eval(lval* v) {
+    //evaluate Sexpressions
+    if (v->type == LVAL_SEXPR) { return lval_eval_sexpr(v); }
+    //all other lval types remain the same
+    return v;
+}
+lval* lval_pop(lval* v, int i) {
+    //find the item at "i"
+    lval* x = v->cell[i];
+
+    //shift memory after the item at "i" over the top
+    memmove(&v->cell[i], &v->cell[i+1], sizeof(lval*) * (v->count-i-1));
+
+    //decrease the count of items in the list
+    v->count--;
+
+    // reallocate the memory used
+    v->cell = realloc(v->cell, sizeof(lval*) * v->count);
+    return x;
+}
+lval* lval_take(lval* v, int i) {
+    lval * x = lval_pop(v, i);
+    lval_del(v);
+    return x;
+}
+
+lval* lval_eval_sexpr (lval* v) {
+
+    // Evaluate children
+    for (int i = 0; i < v->count; i++) {
+        v->cell[i] = lval_eval(v->cell[i]);
+    }
+
+    //error checking
+    for (int i = 0; i < v->count; i++) {
+        if (v->cell[i]->type == LVAL_ERR) { return lval_take(v, i); }
+    }
+
+    //empty expression
+    if (v->count == 0) { return v; }
+
+    //single expression
+    if (v->count == 1) { return lval_take(v, 0); }
+
+    //ensure first element is symbol
+    lval* f = lval_pop(v, 0);
+    if (f->type != LVAL_SYM) {
+        lval_del(f); lval_del(v);
+        return lval_err ("S-expression Does not start with symbol!");
+    }
+
+    //call builtin operator
+    lval* result = builtin_op(v, f->sym);
+    lval_del(f);
+    return result;
+}
 
 int main (int argc, char** argv) {
 
