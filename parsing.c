@@ -104,6 +104,37 @@ void lval_del(lval* v) {
     free(v);
 }
 
+lval* lval_read_num(mpc_ast_t* t) {
+    errno = 0;
+    long long x = strtoll(t->contents, NULL, 10);
+    return errno != ERANGE ? lval_num(x) : lval_err("invalid number");
+}
+
+lval* lval_add(lval* v, lval*x) {
+    v->count++;
+    v->cell = realloc(v->cell, sizeof(lval*) * v->count);
+    v->cell[v->count-1] = x;
+    return v;
+}
+
+lval* lval_read(mpc_ast_t* t) {
+    if (strstr(t->tag, "number")) {return lval_read_num(t);}
+    if (strstr(t->tag, "symbol")) {return lval_sym(t->contents);}
+
+    lval* x = NULL;
+    if (strcmp(t->tag, ">") == 0) {x = lval_sexpr();}
+    if (strstr(t->tag, "sexpr")) {x = lval_sexpr();}
+
+    for (int i = 0; i < t->children_num; i++) {
+        if (strcmp(t->children[i]->contents, "(") == 0) { continue; }
+        if (strcmp(t->children[i]->contents, ")") == 0) { continue; }
+        if (strcmp(t->children[i]->tag, "regex") == 0) { continue; }
+        x = lval_add(x, lval_read(t->children[i]));
+    }
+
+    return x;
+}
+
 int number_of_nodes(mpc_ast_t* t) {
     if (t->children_num == 0) return 1;
     if (t->children_num >= 1) {
@@ -117,73 +148,37 @@ int number_of_nodes(mpc_ast_t* t) {
     return 0;
 }
 
-// Print an "lval"
-void lval_print (lval v) {
-    switch (v.type) {
-        // In the case the type is a number, print it
-        // Then 'break' out of the switch
-        case LVAL_NUM:
-            printf("%lli", v.num);
-            break;
+void lval_print(lval* v);
+void lval_expr_print(lval* v, char open, char close);
 
-            // In the case the type is an error
-        case LVAL_ERR:
-            // Check what type of error it is and print it
-            if (v.num == LERR_DIV_ZERO) {
-                printf("Error: Division By Zero!");
-            }
-            if (v.num == LERR_BAD_OP) {
-                printf("Error: Invalid Operator!");
-            }
-            if (v.num == LERR_BAD_NUM) {
-                printf("Error: Invalid Number!");
-            }
-            break;
+    // Print an "lval"
+void lval_print (lval* v) {
+    switch(v->type) {
+        case LVAL_NUM: printf("%lli", v->num); break;
+        case LVAL_ERR: printf("Error: %s", v->err); break;
+        case LVAL_SYM: printf("%s", v->sym); break;
+        case LVAL_SEXPR: lval_expr_print(v, '(', ')'); break;
     }
 }
 
-// Print an "lval" followed by a newline
-void lval_println(lval v) {
-    lval_print(v);
+void lval_expr_print(lval* v, char open, char close) {
+    putchar(open);
+    for (int i = 0; i < v->count; i++) {
+
+        lval_print(v->cell[i]);
+
+        if (i != (v->count-1)) {
+            putchar(' ');
+        }
+    }
+    putchar(close);
+}
+
+void lval_println(lval* x) {
+    lval_print(x);
     putchar('\n');
 }
 
-lval eval_op(lval x, char *op, lval y){
-    if (x.type == LVAL_ERR) { return x; }
-    if (y.type == LVAL_ERR) { return y; }
-
-    if (strcmp(op, "+") == 0) {return lval_num (x.num + y.num);}
-    if (strcmp(op, "-") == 0) {return lval_num (x.num - y.num);}
-    if (strcmp(op, "*") == 0) {return lval_num (x.num * y.num);}
-    if (strcmp(op, "/") == 0) {
-        printf("%lld\n", y.num);
-        return y.num == 0 ? lval_err(LERR_DIV_ZERO) : lval_num(x.num / y.num);
-    }
-    puts("bad op");
-    return lval_err(LERR_BAD_OP);
-}
-
-
-lval eval (mpc_ast_t* t) {
-    if ( strstr(t->tag, "number") ) {
-        // check if there is some error in conversion
-        errno = 0;
-        long long x = strtoll(t->contents, NULL, 10);
-        return errno != ERANGE ? lval_num(x) : lval_err(LERR_BAD_NUM);
-    }
-
-    char* op = t->children[1]->contents;
-
-    lval x = eval(t->children[2]);
-
-    int i = 3;
-    while(strstr(t->children[i]->tag, "expr")){
-        x = eval_op(x, op, eval(t->children[i]));
-        i++;
-    }
-
-    return x;
-}
 
 int main (int argc, char** argv) {
 
@@ -220,15 +215,10 @@ int main (int argc, char** argv) {
         // attempt to parse the user input
         mpc_result_t r;
 
-        /*
-         * FIXME: with the following parsing/evaluation, invalid op and
-         * invalid number errors won't be printed to the user
-         * */
-
         if ( mpc_parse("<stdin>", input, Lispy, &r) ) {
 
-            lval result = eval(r.output);
-            lval_println(result);
+            lval* x = lval_read(r.output);
+            lval_println(x);
             mpc_ast_delete(r.output);
         }
         else {
