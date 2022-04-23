@@ -249,12 +249,15 @@ void lval_println(lval* x) {
     putchar('\n');
 }
 
-lval* lval_eval_sexpr (lval* v);
+lval* lval_eval_sexpr (lenv* e, lval* v);
 
-lval* lval_eval(lval* v) {
-    //evaluate Sexpressions
-    if (v->type == LVAL_SEXPR) { return lval_eval_sexpr(v); }
-    //all other lval types remain the same
+lval* lval_eval(lenv* e, lval* v) {
+    if (v->type == LVAL_SYM) {
+        lval* x = lenv_get(e, v);
+        lval_del(v);
+        return x;
+    }
+    if (v->type == LVAL_SEXPR) { return lval_eval_sexpr(e, v); }
     return v;
 }
 lval* lval_pop(lval* v, int i) {
@@ -469,33 +472,28 @@ lval* builtin(lval* a, char* func) {
     return lval_err("Unknown Function!");
 }
 
-lval* lval_eval_sexpr (lval* v) {
+lval* lval_eval_sexpr (lenv* e, lval* v) {
 
-    // Evaluate children
     for (int i = 0; i < v->count; i++) {
-        v->cell[i] = lval_eval(v->cell[i]);
+        v->cell[i] = lval_eval(e, v->cell[i]);
     }
 
-    //error checking
     for (int i = 0; i < v->count; i++) {
         if (v->cell[i]->type == LVAL_ERR) { return lval_take(v, i); }
     }
 
-    //empty expression
     if (v->count == 0) { return v; }
-
-    //single expression
     if (v->count == 1) { return lval_take(v, 0); }
 
-    //ensure first element is symbol
+    //Ensure first element is a function after evaluation
     lval* f = lval_pop(v, 0);
-    if (f->type != LVAL_SYM) {
-        lval_del(f); lval_del(v);
-        return lval_err ("S-expression Does not start with symbol!");
+    if (f->type != LVAL_FUN) {
+        lval_del(v); lval_del(f);
+        return lval_err("first element is not a function");
     }
 
-    //call builtin operator
-    lval* result = builtin(v, f->sym);
+    //If so call function to get result
+    lval* result = f->fun(e, v);
     lval_del(f);
     return result;
 }
