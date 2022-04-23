@@ -296,6 +296,46 @@ void lenv_del(lenv* e) {
     free(e);
 }
 
+lval* lenv_get(lenv* e, lval* k) {
+
+    //Iterate over all items in environment
+    for (int i = 0; i < e->count; i++) {
+        // Check if the stored string matches the symbol string
+        // If it does, return a copy of the value
+        if (strcmp(e->syms[i], k->sym) == 0) {
+            return lval_copy(e->vals[i]);
+        }
+    }
+    //if no symbol found return error
+    return lval_err("unbound symbol!");
+}
+
+void lvel_put(lenv* e, lval* k, lval* v) {
+
+    // Iterate over all items in environment
+    // This is to see if variable already exists
+    for (int i = 0; i < e->count; i++) {
+
+        // if variable is found delete item at that position
+        // and replace with variable supplied by user
+        if (strcmp(e->syms[i], k->sym) == 0) {
+            lval_del(e->vals[i]);
+            e->vals[i] = lval_copy(v);
+            return;
+        }
+    }
+
+    // if no existing entry found allocate space for new entry
+    e->count++;
+    e->vals = realloc(e->vals, sizeof(lval*) * e->count);
+    e->syms = realloc(e->syms, sizeof(char*) * e->count);
+
+    // copy contents of lval and symbol string into new location
+    e->vals[e->count-1] = lval_copy(v);
+    e->syms[e->count-1] = malloc((strlen(k->sym)+1) * sizeof(char));
+    strcpy(e->syms[e->count-1], k->sym);
+}
+
 lval* builtin_head(lval* a) {
 
     LASSERT(a, a->count == 1,
