@@ -313,7 +313,7 @@ lval* lenv_get(lenv* e, lval* k) {
     return lval_err("unbound symbol!");
 }
 
-void lvel_put(lenv* e, lval* k, lval* v) {
+void lenv_put(lenv* e, lval* k, lval* v) {
 
     // Iterate over all items in environment
     // This is to see if variable already exists
@@ -339,7 +339,7 @@ void lvel_put(lenv* e, lval* k, lval* v) {
     strcpy(e->syms[e->count-1], k->sym);
 }
 
-lval* builtin_head(lval* a) {
+lval* builtin_head(lenv* e, lval* a) {
 
     LASSERT(a, a->count == 1,
         "Function 'head' passed too many arguments!");
@@ -356,7 +356,7 @@ lval* builtin_head(lval* a) {
     return v;
 }
 
-lval* builtin_tail(lval* a) {
+lval* builtin_tail(lenv* e, lval* a) {
 
     LASSERT(a, a->count == 1,
         "Function 'tail' passed too many arguments!");
@@ -372,12 +372,12 @@ lval* builtin_tail(lval* a) {
     return v;
 }
 
-lval* builtin_list(lval* a) {
+lval* builtin_list(lenv* e, lval* a) {
     a->type = LVAL_QEXPR;
     return a;
 }
 
-lval* builtin_eval(lval* a) {
+lval* builtin_eval(lenv* e, lval* a) {
     LASSERT(a, a->count == 1,
             "Function 'eval' passed too many arguments");
     LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
@@ -400,7 +400,7 @@ lval* lval_join (lval* x, lval* y) {
     return x;
 }
 
-lval* builtin_join(lval* a) {
+lval* builtin_join(lenv* e, lval* a) {
 
     for (int i = 0; i < a->count; i++) {
         LASSERT(a, a->cell[i]->type == LVAL_QEXPR,
@@ -417,7 +417,7 @@ lval* builtin_join(lval* a) {
     return x;
 }
 
-lval * builtin_op(lval* a, char* op) {
+lval * builtin_op(lenv* e, lval* a, char* op) {
 
     //Ensure all arguments are numbers
     for (int i = 0; i < a->count; i++) {
@@ -461,13 +461,31 @@ lval * builtin_op(lval* a, char* op) {
 
 }
 
-lval* builtin(lval* a, char* func) {
-    if (strcmp("list", func) == 0) {return builtin_list(a);}
-    if (strcmp("head", func) == 0) {return builtin_head(a);}
-    if (strcmp("tail", func) == 0) {return builtin_tail(a);}
-    if (strcmp("join", func) == 0) {return builtin_join(a);}
-    if (strcmp("eval", func) == 0) {return builtin_eval(a);}
-    if (strstr("+-/*", func)) {return builtin_op(a, func);}
+lval * builtin_op(lenv* e, lval* a, char* op);
+
+lval* builtin_add(lenv* e, lval* a) {
+    return builtin_op(e, a, "+");
+}
+
+lval* builtin_sub(lenv* e, lval* a) {
+    return builtin_op(e, a, "-");
+}
+
+lval* builtin_mul(lenv* e, lval* a) {
+    return builtin_op(e, a, "*");
+}
+
+lval* builtin_div(lenv* e, lval* a) {
+    return builtin_op(e, a, "/");
+}
+
+lval* builtin(lenv* e, lval* a, char* func) {
+    if (strcmp("list", func) == 0) {return builtin_list(e, a);}
+    if (strcmp("head", func) == 0) {return builtin_head(e, a);}
+    if (strcmp("tail", func) == 0) {return builtin_tail(e, a);}
+    if (strcmp("join", func) == 0) {return builtin_join(e, a);}
+    if (strcmp("eval", func) == 0) {return builtin_eval(e, a);}
+    if (strstr("+-/*", func)) {return builtin_op(e, a, func);}
     lval_del(a);
     return lval_err("Unknown Function!");
 }
@@ -496,6 +514,13 @@ lval* lval_eval_sexpr (lenv* e, lval* v) {
     lval* result = f->fun(e, v);
     lval_del(f);
     return result;
+}
+
+void lenv_add_builtin(lenv* e, char* name, lbuiltin func) {
+    lval* k = lval_sym(name);
+    lval* v = lval_fun(func);
+    lenv_put(e, k, v);
+    lval_del(k); lval_del(v);
 }
 
 int main (int argc, char** argv) {
