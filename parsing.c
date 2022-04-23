@@ -29,23 +29,40 @@ void add_history(char* unused) {}
 #define LASSERT(args, cond, err) \
     if(!(cond)) {lval_del(args); return lval_err(err);}
 
-// Create Enumeration of Possible lval Types
-enum { LVAL_ERR, LVAL_NUM, LVAL_SYM, LVAL_SEXPR, LVAL_QEXPR };
+//Forward Declarations
+struct lval;
+struct lenv;
+typedef struct lval lval;
+typedef struct lenv lenv;
+
+// Lisp Value
+
+enum { LVAL_ERR, LVAL_NUM, LVAL_SYM, LVAL_FUN,
+    LVAL_SEXPR, LVAL_QEXPR };
+
+typedef lval* (*lbuiltin) (lenv*, lval*);
+
+// Declare new lval struct
+struct lval {
+    int type;
+    long long num;
+    char* err;
+    char* sym;
+    lbuiltin fun;
+
+    int count;
+    lval** cell;
+};
+
+struct lenv{
+    int count;
+    char** syms;
+    lval** vals;
+};
 
 // Create Enumeration of Possible Error Types
 enum { LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM };
 
-// Declare new lval struct
-typedef struct lval {
-    int type;
-    long long num;
-    // Error and symbol types have some string data
-    char* err;
-    char* sym;
-    // Count and Pointer to a list of "lval"
-    int count;
-    struct lval** cell;
-} lval;
 
 // Construct a pointer to a new number lval
 lval* lval_num(long long x) {
@@ -73,6 +90,13 @@ lval* lval_sym(char* s) {
     return v;
 }
 
+lval* lval_fun(lbuiltin func) {
+    lval* v = malloc(sizeof(lval));
+    v->type = LVAL_FUN;
+    v->fun = func;
+    return v;
+}
+
 // Construct a poiter to a new sexpr lval
 lval* lval_sexpr(void) {
     lval* v = malloc(sizeof(lval));
@@ -94,8 +118,9 @@ lval* lval_qexpr(void) {
 void lval_del(lval* v) {
 
     switch (v->type) {
-        // Do nothing special for number type
+        // Do nothing special for number or func type
         case LVAL_NUM: break;
+        case LVAL_FUN: break;
 
                        // For Err or Sym free the string data
         case LVAL_ERR: free(v->err); break;
@@ -155,17 +180,39 @@ lval* lval_read(mpc_ast_t* t) {
     return x;
 }
 
-int number_of_nodes(mpc_ast_t* t) {
-    if (t->children_num == 0) return 1;
-    if (t->children_num >= 1) {
-        int total = 1;
-        for(int i = 0; i < t->children_num; i++){
-            total += number_of_nodes(t->children[i]);
+lval* lval_copy(lval* v) {
 
-        }
-        return total;
+    lval* x = malloc(sizeof(lval));
+    x->type = v->type;
+
+    switch (v->type) {
+
+        //Copy functions and numbers directly
+        case LVAL_NUM: x->num = v->num; break;
+        case LVAL_FUN: x->fun = v->fun; break;
+
+        //Copy strings using malloc and strcpy
+        case LVAL_ERR:
+            x->err = malloc((strlen(v->err) + 1) * sizeof(char));
+            strcpy(x->err, v->err); break;
+
+        case LVAL_SYM:
+            x->sym = malloc((strlen(v->sym) + 1) * sizeof(char));
+            strcpy(x->sym, v->sym);
+            break;
+
+        // Copy lists by copying each sub expression
+        case LVAL_SEXPR:
+        case LVAL_QEXPR:
+            x->count = v->count;
+            x->cell = malloc(sizeof(lval*) * v->count);
+            for (int i = 0; i < v->count; i++) {
+                x->cell[i] = lval_copy(v->cell[i]);
+            }
+            break;
     }
-    return 0;
+
+    return x;
 }
 
 void lval_print(lval* v);
@@ -175,6 +222,7 @@ void lval_print (lval* v) {
     switch(v->type) {
         case LVAL_NUM: printf("%lli", v->num); break;
         case LVAL_ERR: printf("Error: %s", v->err); break;
+        case LVAL_FUN: printf("<function>"); break;
         case LVAL_SYM: printf("%s", v->sym); break;
         case LVAL_SEXPR: lval_expr_print(v, '(', ')'); break;
         case LVAL_QEXPR: lval_expr_print(v, '{', '}'); break;
@@ -223,10 +271,29 @@ lval* lval_pop(lval* v, int i) {
     v->cell = realloc(v->cell, sizeof(lval*) * v->count);
     return x;
 }
+
 lval* lval_take(lval* v, int i) {
     lval * x = lval_pop(v, i);
     lval_del(v);
     return x;
+}
+
+lenv* lenv_new(void) {
+    lenv* e = malloc(sizeof(lenv));
+    e->count = 0;
+    e->syms = NULL;
+    e->vals = NULL;
+    return e;
+}
+
+void lenv_del(lenv* e) {
+    for (int i = 0; i < e->count; i++) {
+        free(e->syms[i]);
+        lval_del(e->vals[i]);
+    }
+    free(e->syms);
+    free(e->vals);
+    free(e);
 }
 
 lval* builtin_head(lval* a) {
@@ -407,8 +474,7 @@ int main (int argc, char** argv) {
     mpca_lang(MPCA_LANG_DEFAULT,
             " \
             number: /-?[0-9]+/; \
-            symbol: \"list\" | \"head\" | \"tail\" | \"join\" \
-            | \"eval\" | '+' | '-' | '*' | '/'; \
+            symbol: /[a-zA-Z0-9_+\\-*\\/\\\\=<>!&]+/; \
             sexpr: '(' <expr>* ')'; \
             qexpr: '{' <expr>* '}'; \
             expr: <number> | <symbol> | <sexpr> | <qexpr> ;\
