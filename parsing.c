@@ -244,6 +244,20 @@ void lval_expr_print(lval* v, char open, char close) {
     putchar(close);
 }
 
+lval* lenv_get(lenv* e, lval* k) {
+
+    //Iterate over all items in environment
+    for (int i = 0; i < e->count; i++) {
+        // Check if the stored string matches the symbol string
+        // If it does, return a copy of the value
+        if (strcmp(e->syms[i], k->sym) == 0) {
+            return lval_copy(e->vals[i]);
+        }
+    }
+    //if no symbol found return error
+    return lval_err("unbound symbol!");
+}
+
 void lval_println(lval* x) {
     lval_print(x);
     putchar('\n');
@@ -299,19 +313,6 @@ void lenv_del(lenv* e) {
     free(e);
 }
 
-lval* lenv_get(lenv* e, lval* k) {
-
-    //Iterate over all items in environment
-    for (int i = 0; i < e->count; i++) {
-        // Check if the stored string matches the symbol string
-        // If it does, return a copy of the value
-        if (strcmp(e->syms[i], k->sym) == 0) {
-            return lval_copy(e->vals[i]);
-        }
-    }
-    //if no symbol found return error
-    return lval_err("unbound symbol!");
-}
 
 void lenv_put(lenv* e, lval* k, lval* v) {
 
@@ -385,7 +386,7 @@ lval* builtin_eval(lenv* e, lval* a) {
 
     lval* x = lval_take(a, 0);
     x->type = LVAL_SEXPR;
-    return lval_eval(x);
+    return lval_eval(e, x);
 }
 
 lval* lval_join (lval* x, lval* y) {
@@ -523,6 +524,21 @@ void lenv_add_builtin(lenv* e, char* name, lbuiltin func) {
     lval_del(k); lval_del(v);
 }
 
+void lenv_add_builtins(lenv* e) {
+    // List Functions
+    lenv_add_builtin(e, "list", builtin_list);
+    lenv_add_builtin(e, "head", builtin_head);
+    lenv_add_builtin(e, "tail", builtin_tail);
+    lenv_add_builtin(e, "eval", builtin_eval);
+    lenv_add_builtin(e, "join", builtin_join);
+
+    // Mathematical Functions
+    lenv_add_builtin(e, "+", builtin_add);
+    lenv_add_builtin(e, "-", builtin_sub);
+    lenv_add_builtin(e, "*", builtin_mul);
+    lenv_add_builtin(e, "/", builtin_div);
+}
+
 int main (int argc, char** argv) {
 
     // Create some parsers
@@ -549,35 +565,30 @@ int main (int argc, char** argv) {
     puts("Lispy Version 0.0.0.0.1");
     puts("Press Ctrl+c to Exit\n");
 
+    lenv* e = lenv_new();
+    lenv_add_builtins(e);
     while(1) {
-
-        // Output the prompt and get input
         char* input = readline("lispy> ");
-
-        // Add input to history
         add_history(input);
 
-        // attempt to parse the user input
         mpc_result_t r;
+        if (mpc_parse("<stdin>", input, Lispy, &r)) {
 
-        if ( mpc_parse("<stdin>", input, Lispy, &r) ) {
-
-            lval* x = lval_eval(lval_read(r.output));
+            lval* x = lval_eval(e, lval_read(r.output));
             lval_println(x);
             lval_del(x);
+
             mpc_ast_delete(r.output);
-        }
-        else {
-            //otherwise print the error
+        } else {
             mpc_err_print(r.error);
             mpc_err_delete(r.error);
         }
 
-        // free retrieved input
         free(input);
     }
 
-    //undefine and Delete our Parsers
+    lenv_del(e);
+
     mpc_cleanup(5, Number, Symbol, Sexpr, Qexpr, Expr, Lispy);
     return EXIT_SUCCESS;
 }
