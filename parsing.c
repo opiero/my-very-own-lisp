@@ -26,8 +26,12 @@ void add_history(char* unused) {}
 #include <editline/readline.h>
 #endif
 
-#define LASSERT(args, cond, err) \
-    if(!(cond)) {lval_del(args); return lval_err(err);}
+#define LASSERT(args, cond, fmt, ...) \
+    if (!cond) { \
+        lval* err = lval_err(fmt, ##__VA_ARGS__); \
+        lval_del(args); \
+        return err \
+    }
 
 //Forward Declarations
 struct lval;
@@ -73,11 +77,26 @@ lval* lval_num(long long x) {
 }
 
 // Construct a pointer to a new error lval
-lval* lval_err(char* m) {
+lval* lval_err(char* fmt, ...) {
     lval* v = malloc(sizeof(lval));
     v->type = LVAL_ERR;
-    v->err = malloc(strlen(m) * sizeof(char) + 1);
-    strcpy(v->err, m);
+
+    // create a va list and initialize it
+    va_list va;
+    va_start(va, fmt);
+
+    // allocate 512 bytes of space
+    v->err = malloc(512 * sizeof(char));
+
+    //printf the error string with a maximum of 511 characters
+    vsnprintf(v->err, 511, fmt, va);
+
+    // reallocate to number of bytes actually used
+    v->err = realloc(v->err, (strlen(v->err) + 1) * sizeof(char));
+
+    //cleanup our va_list
+    va_end(va);
+
     return v;
 }
 
@@ -343,9 +362,13 @@ void lenv_put(lenv* e, lval* k, lval* v) {
 lval* builtin_head(lenv* e, lval* a) {
 
     LASSERT(a, a->count == 1,
-        "Function 'head' passed too many arguments!");
+        "Function 'head' passed too many arguments!"
+        "Got %i, Expected %i.",
+        a->count, 1);
     LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
-        "Function 'head' passed incorrect type!");
+        "Function 'head' passed incorrect type for argument 0. "
+        "Got %s, Expected %s",
+        ltype_name(a->cell[0]->type), ltype_name(LVAL_QEXPR));
     LASSERT(a, a->cell[0]->count != 0,
         "Function 'head' passed {}!");
 
