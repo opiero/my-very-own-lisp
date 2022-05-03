@@ -492,6 +492,30 @@ lval* lval_join (lval* x, lval* y) {
     return x;
 }
 
+lval* builtin_lambda(lenv* e, lval* a) {
+
+    // Check Two arguments, each of which are Q-Expressions
+    /*LASSERT_NUM("\\", a, 2);
+    LASSERT_TYPE("\\", a, 0, LVAL_QEXPR);
+    LASSERT_TYPE("LASSERT_TYPE", a, 1, LVAL_QEXPR);*/
+
+    // check first Q-Expression contains only symbols
+    for (int i = 0; i < a->cell[0]->count; i++) {
+        LASSERT(a, (a->cell[0]->cell[i]->type == LVAL_SYM),
+        "Cannot define non-symbol. Got %s, Expected %s.",
+        ltype_name(a->cell[0]->cell[i]->type), ltype_name(LVAL_SYM));
+    }
+
+    //Pop first two arguments and pass them to lval_lambda
+    lval* formals = lval_pop(a, 0);
+    lval* body = lval_pop(a, 0);
+    lval_del(a);
+
+    return lval_lambda(formals, body);
+
+
+}
+
 lval* builtin_join(lenv* e, lval* a) {
 
     for (int i = 0; i < a->count; i++) {
@@ -661,6 +685,7 @@ void lenv_add_builtins(lenv* e) {
 
     // Variable Functions
     lenv_add_builtin(e, "def", builtin_def);
+    lenv_add_builtin(e, "\\", builtin_lambda);
 }
 
 int main (int argc, char** argv) {
