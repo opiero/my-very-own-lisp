@@ -46,14 +46,21 @@ enum { LVAL_ERR, LVAL_NUM, LVAL_SYM, LVAL_FUN,
 
 typedef lval* (*lbuiltin) (lenv*, lval*);
 
-// Declare new lval struct
 struct lval {
     int type;
+
+    // basic
     long long num;
     char* err;
     char* sym;
-    lbuiltin fun;
 
+    //function
+    lbuiltin builtin;
+    lenv* env;
+    lval* formals;
+    lval* body;
+
+    // Expression
     int count;
     lval** cell;
 };
@@ -67,6 +74,23 @@ struct lenv{
 // Create Enumeration of Possible Error Types
 enum { LERR_DIV_ZERO, LERR_BAD_OP, LERR_BAD_NUM };
 
+lenv* lenv_new(void);
+
+lval* lval_lambda(lval* formals, lval* body) {
+    lval* v = malloc(sizeof(lval));
+    v->type = LVAL_FUN;
+
+    //set builtin to null
+    v->builtin = NULL;
+
+    //build new environment
+    v->env = lenv_new();
+
+    //set formals and body
+    v->formals = formals;
+    v->body = body;
+    return v;
+}
 
 // Construct a pointer to a new number lval
 lval* lval_num(long long x) {
@@ -134,12 +158,20 @@ lval* lval_qexpr(void) {
     return v;
 }
 
+void lenv_del(lenv* e);
+
 void lval_del(lval* v) {
 
     switch (v->type) {
         // Do nothing special for number or func type
         case LVAL_NUM: break;
-        case LVAL_FUN: break;
+        case LVAL_FUN:
+            if (!v->builtin) {
+                lenv_del(v->env);
+                lval_del(v->formals);
+                lval_del(v->body);
+            }
+            break;
 
                        // For Err or Sym free the string data
         case LVAL_ERR: free(v->err); break;
@@ -199,6 +231,8 @@ lval* lval_read(mpc_ast_t* t) {
     return x;
 }
 
+lenv* lenv_copy(lenv* e);
+
 lval* lval_copy(lval* v) {
 
     lval* x = malloc(sizeof(lval));
@@ -208,8 +242,17 @@ lval* lval_copy(lval* v) {
 
         //Copy functions and numbers directly
         case LVAL_NUM: x->num = v->num; break;
-        case LVAL_FUN: x->fun = v->fun; break;
-
+        case LVAL_FUN:
+            if (v->builtin) {
+                x->builtin = v->builtin;
+            }
+            else {
+                x->builtin = NULL;
+                x->env = lenv_copy(v->env);
+                x->formals = lval_copy(v->formals);
+                x->body = lval_copy(v->body);
+            }
+            break;
         //Copy strings using malloc and strcpy
         case LVAL_ERR:
             x->err = malloc((strlen(v->err) + 1) * sizeof(char));
@@ -241,7 +284,14 @@ void lval_print (lval* v) {
     switch(v->type) {
         case LVAL_NUM: printf("%lli", v->num); break;
         case LVAL_ERR: printf("Error: %s", v->err); break;
-        case LVAL_FUN: printf("<function>"); break;
+        case LVAL_FUN:
+            if (v->builtin) {
+                printf("<builtin>");
+            } else {
+                printf("(\\ "); lval_print(v->formals);
+                putchar(' '); lval_print(v->body); putchar(')');
+            }
+        break;
         case LVAL_SYM: printf("%s", v->sym); break;
         case LVAL_SEXPR: lval_expr_print(v, '(', ')'); break;
         case LVAL_QEXPR: lval_expr_print(v, '{', '}'); break;
@@ -569,7 +619,9 @@ void lenv_add_builtin(lenv* e, char* name, lbuiltin func) {
 
 lval* builtin_def (lenv* e, lval* a) {
     LASSERT(a, a->cell[0]->type == LVAL_QEXPR,
-            "Function 'def' passed incorrect type!");
+            "Function 'def' passed incorrect type!"
+            " Got %s, Expected %s",
+            ltype_name(a->cell[0]->type), ltype_name(LVAL_QEXPR));
 
     // First argument is symbol list
     lval* syms = a->cell[0];
