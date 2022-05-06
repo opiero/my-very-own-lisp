@@ -33,6 +33,23 @@ void add_history(char* unused) {}
         return err ;\
     }
 
+#define LASSERT_TYPE(func, args, index, expect) \
+    LASSERT(args, args->cell[index]->type == expect, \
+            "Function '%s' passed incorrect type for argument %i " \
+            "Got %s, Expected %s." \
+            func, index, ltype_name(args->cell[index]->type), ltype_name(expect))
+
+#define LASSERT_NUM(func, args, num) \
+    LASSERT(args, args->count == num, \
+            "Function '%s' passed incorrect number of arguments " \
+            "Got %i, Expected %i.", \
+            func, args->count, num)
+
+#define LASSERT_NOT_EMPTY(func, args, index) \
+    LASSERT(args, args->count == num, \
+            func->args->cell[index]->count != 0, \
+            "Function '%s' passed {} for argument %i.", func, index)
+
 //Forward Declarations
 struct lval;
 struct lenv;
@@ -495,9 +512,9 @@ lval* lval_join (lval* x, lval* y) {
 lval* builtin_lambda(lenv* e, lval* a) {
 
     // Check Two arguments, each of which are Q-Expressions
-    /*LASSERT_NUM("\\", a, 2);
+    LASSERT_NUM("\\", a, 2);
     LASSERT_TYPE("\\", a, 0, LVAL_QEXPR);
-    LASSERT_TYPE("LASSERT_TYPE", a, 1, LVAL_QEXPR);*/
+    LASSERT_TYPE("LASSERT_TYPE", a, 1, LVAL_QEXPR);
 
     // check first Q-Expression contains only symbols
     for (int i = 0; i < a->cell[0]->count; i++) {
