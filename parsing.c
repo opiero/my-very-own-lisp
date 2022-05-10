@@ -118,6 +118,7 @@ lval* lval_num(long long x) {
     return v;
 }
 
+
 // Construct a pointer to a new error lval
 lval* lval_err(char* fmt, ...) {
     lval* v = malloc(sizeof(lval));
@@ -651,6 +652,8 @@ lval* builtin(lenv* e, lval* a, char* func) {
     return lval_err("Unknown Function!");
 }
 
+lval* lval_call(lenv* e, lval* f, lval* v);
+
 lval* lval_eval_sexpr (lenv* e, lval* v) {
 
     for (int i = 0; i < v->count; i++) {
@@ -667,12 +670,16 @@ lval* lval_eval_sexpr (lenv* e, lval* v) {
     //Ensure first element is a function after evaluation
     lval* f = lval_pop(v, 0);
     if (f->type != LVAL_FUN) {
-        lval_del(v); lval_del(f);
-        return lval_err("first element is not a function");
+        lval* err = lval_err(
+            "S-Expression starts with incorrect type. "
+            "Got %s, Expected %s.",
+            ltype_name(f->type), ltype_name(LVAL_FUN));
+        lval_del(f); lval_del(v);
+        return err;
     }
 
     //If so call function to get result
-    lval* result = f->fun(e, v);
+    lval* result = lval_call(e, f , v);
     lval_del(f);
     return result;
 }
@@ -682,6 +689,55 @@ void lenv_add_builtin(lenv* e, char* name, lbuiltin func) {
     lval* v = lval_fun(func);
     lenv_put(e, k, v);
     lval_del(k); lval_del(v);
+}
+
+lval* lval_call(lenv* e, lval* f, lval* a) {
+    //if builtin then simply add that
+    if (f->builtin) { return f->builtin(e, a);}
+
+    // record argument counts
+    int given = a->count;
+    int total = f->formals->count;
+
+    // while arguments remain unprocessed
+    while (a->count) {
+
+        //if we've ran out of formal arguments to bind
+        if (f->formals->count == 0) {
+           lval_del(a); return lval_err("Function passed too many arguments. "
+                   "Got %i, Expected %i", given, total);
+        }
+
+        // pop the first symbol from the formals
+        lval* sym = lval_pop(f->formals, 0);
+
+        // pop the next argument from the list
+        lval* val = lval_pop(a, 0);
+
+        // bind a copy into the functions environment
+        lenv_put(f->env, sym, val);
+
+        // delete symbol and value
+        lval_del(sym); lval_del(val);
+    }
+
+    // argument list is now bound so can be cleaned up
+    lval_del(a);
+
+    // if all formals have been bound to evaluate
+    if (f->formals->count == 0) {
+
+        //set environment parent to evaluation environment
+        f->env->par = e;
+
+        // evaluate and return
+        return builtin_eval(
+            f->env, lval_add(lval_sexpr(), lval_copy(f->body)));
+    }
+    else {
+        // otherwise return partially evaluated function
+        return lval_copy(f);
+    }
 }
 
 lval* builtin_var (lenv* e, lval* a, char* func) {
